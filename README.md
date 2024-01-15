@@ -10,7 +10,7 @@ sudo apt install rustc libmodsecurity-dev clang
 
 You can also install rust from rustup.
 
-After than, build the library with
+Build the library with:
 
 ``` sh
 cargo build

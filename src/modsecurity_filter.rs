@@ -16,6 +16,7 @@ pub struct ModSecurityWAF {
     current_headers: Headers,
     blocking: bool,
     intervention: Option<Intervention>,
+    request_body_max_size: Option<isize>,
 }
 
 impl ModSecurityWAF {
@@ -27,7 +28,6 @@ impl ModSecurityWAF {
 
 static POOL: Lazy<ThreadPool> = Lazy::new(|| {
     ThreadPoolBuilder::new()
-        .num_threads(4)
         .panic_handler(|p| {
             tracing::error!(?p, "Panic in thread pool");
         })
@@ -117,6 +117,12 @@ impl UserFilter for ModSecurityWAF {
         for arg in args.clone().sequence_values::<String>() {
             match &*arg? {
                 "blocking" => result.blocking = true,
+                arg if arg.strip_prefix("max_body_size:").is_some() => {
+                    result.request_body_max_size = arg
+                        .strip_prefix("max_body_size:")
+                        .map(|s| s.parse().ok())
+                        .flatten()
+                }
                 _ => (),
             }
         }
@@ -162,7 +168,7 @@ impl UserFilter for ModSecurityWAF {
             .get::<_, String>("req_ver", ())
             .unwrap_or("1.1".to_string());
         let body = msg
-            .body(None, Some(5_000_000))?
+            .body(None, Some(self.request_body_max_size.unwrap_or(5_000_000)))?
             .map(|s| s.as_bytes().to_vec())
             .unwrap_or_default();
         let headers = self.current_headers.clone();

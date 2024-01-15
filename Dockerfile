@@ -17,6 +17,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM haproxy:2.9
 ENTRYPOINT ["docker-entrypoint.sh"]
+USER root
+RUN apt update && apt install -y libmodsecurity3 && rm -rf /var/lib/apt/lists/*
 USER haproxy
 WORKDIR /var/lib/haproxy
 
