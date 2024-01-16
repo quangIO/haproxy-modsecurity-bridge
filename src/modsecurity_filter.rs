@@ -35,8 +35,9 @@ static POOL: Lazy<ThreadPool> = Lazy::new(|| {
         .expect("Must be able to create thread")
 });
 
-static PATHS: Lazy<Vec<PathBuf>> = Lazy::new(|| {
+fn get_path() -> Vec<PathBuf> {
     let rules_globs: String = std::env::var("MODSECURITY_RULE_PATHS").unwrap_or_default();
+    tracing::info!(?rules_globs, "Loading globs");
     let rules_globs = rules_globs.split(",").map(|s| glob(s));
     let mut results = vec![];
     for glob in rules_globs {
@@ -49,6 +50,7 @@ static PATHS: Lazy<Vec<PathBuf>> = Lazy::new(|| {
         };
 
         for path in glob {
+            tracing::info!(?path, "Loading config");
             match path {
                 Ok(path) => results.push(path),
                 Err(error) => tracing::error!(%error, "Cannot load rules from path"),
@@ -56,10 +58,6 @@ static PATHS: Lazy<Vec<PathBuf>> = Lazy::new(|| {
         }
     }
     results
-});
-
-thread_local! {
-    static MOD_SECURITY: RefCell<(ModSecurity, RulesSet)> = RefCell::new((ModSecurity::default(), RulesSet::from_paths(&PATHS).expect("Must be able to load rules")))
 }
 
 #[derive(Debug)]
@@ -77,6 +75,9 @@ struct CheckRequestParams {
 
 #[instrument(level = "trace", skip(sender))]
 fn check_request(params: CheckRequestParams, sender: Option<Sender<Intervention>>) {
+    thread_local! {
+        static MOD_SECURITY: RefCell<(ModSecurity, RulesSet)> = RefCell::new((ModSecurity::default(), RulesSet::from_paths(&get_path()).expect("Must be able to load rules")))
+    }
     MOD_SECURITY.with_borrow_mut(|(modsec, rules)| {
         let mut tx = Transaction::new(modsec, rules, Some(&params.id));
         let _ = tx.process_connection(
